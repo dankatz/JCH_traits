@@ -1,104 +1,182 @@
-#assembling the relevant datasets
-library(dplyr)
-library(data.table)
-library(metafor)
-library(ggplot2)
+#assembling the publicly available trait data, pulling missing data from the genus, 
+#analyzing using only the relevant traits
 
-##########
-#getting species codes for relevant species from TRY (i.e., those in Comita et al. 2014) 
-##########
+#set up work environment
+library(ggplot2)
+library(dplyr)
+library(metafor)
+library(tidyr)
+library(data.table)
+
 rm(list = ls())
+
 
 #load in and prepare data from Comita et al.
 setwd("Q:/Ibanez Lab/Dan Katz/JCH traits/data")
 cdata <- read.csv("jec12232-sup-0001-TableS1.csv")
 ES <- escalc(measure = "OR", ai = cdata$Nosurvivorsnear_high, bi = cdata$No_died_near_high,
-         ci = cdata$No_survivors_far_low, di = cdata$No_died_far_low, var.names = c("OR_mean", "OR_var"))
+             ci = cdata$No_survivors_far_low, di = cdata$No_died_far_low, var.names = c("OR_mean", "OR_var"))
 
 cdata$OR_mean <- as.numeric(ES$OR_mean)
 cdata$OR_var <- as.numeric(ES$OR_var)
-
-#list of species included in meta-analysis
-cdata2 <- select(cdata, Species) %>% distinct() %>% arrange(Species)
-names(cdata2) <- "AccSpeciesName"
-
-#load in data from the TRY species list
-tryspecieslist <- read.table("TryAccSpecies.txt", sep = "\t", header = TRUE)
-names(tryspecieslist)
-
-#combine the two
-overlap_csp_trysp <- left_join(cdata2, tryspecieslist, by = "AccSpeciesName")
-
-#conduct checks on the species that aren't turning up any matches
-#make sure that the species wasn't misspelled
-
-#alternate strategy for reducing missingness and dealing with it: get all species within a focal genus:
-genuslist <- data.frame(gsub( " .*$", "", cdata2$AccSpeciesName))
-names(genuslist) <- "genus"
-genuslist <- distinct(genuslist, genus)
-
-tryspecieslist$genus <- gsub( " .*$", "", tryspecieslist$AccSpeciesName)
-
-overlap_cg_tryg <- left_join(genuslist, tryspecieslist, by = "genus")
-
-#output the species numbers for the TRY data query
-writeClipboard(toString(overlap_cg_tryg$AccSpeciesID))
+cdata$genus <- gsub( " .*$", "", cdata$Species)
+cdata$genus <- tolower(cdata$genus)
 
 
-#what are the available traits
-trytraitlist <- read.table("try_traitlist.txt", sep = "\t", header = TRUE)
-head(trytraitlist)
-
-#relevant traits that were measured for more than ~5000 species: 
-relevanttraits <- c(28, 42, 18, 231, 26, 1263, 11, 1, 21, 47, 38, 37, 159, 55, 343, 153, 14, 95, 33, 1140, 46, 43, 1111, 59, 604, 
-197, 825, 8, 2, 154, 4, 31, 7, 15, 163, 50, 520, 218, 145, 1229, 318, 13, 677, 609, 403, 413, 48, 78, 53, 125,
-138, 66, 981, 1258, 823, 892, 56, 982, 603, 98, 51, 199, 155, 587, 27, 232, 334, 40, 679, 45, 131, 341, 357, 
-1146, 1194, 1008, 358, 1137, 146, 24, 239, 719, 41, 350, 89, 230, 344, 324, 325, 827, 596, 238, 1132, 819, 
-1131, 193, 1135, 30, 54, 570, 233, 128, 345, 12, 1138)
-
-relevanttraitlist <- trytraitlist[trytraitlist$TraitID %in% relevanttraits,]
-
-#adding in downloaded public trait data
+#load in the publicly available trait data from TRY
 traits <- fread("TRYtraitpublicdownload.txt") #takes ~4 min
-head(traits)
-names(traits)
 
+#selected traits, based on what JG thought was important and what traits had the largest amount
+#of publicly available data in TRY
+selectedtraits <- c( #trait description, number of observations on the species level 
+  11,  #Leaf area per leaf dry mass (specific leaf area, SLA), 39
+  1,  #Leaf area, 39 
+  12,  #Leaf lifespan (longevity), 13
+  146,  #Leaf carbon/nitrogen (C/N) ratio, 12 
+  14,  #Leaf nitrogen (N) content per leaf dry mass, 40
+  4,  #Stem dry mass per stem fresh volume (stem specific d, 55
+  138,  #Seed number per reproducton unit, 5
+  59,  #Plant lifespan (longevity), 13
+  
+  #other potentially useful traits,
+  18,  #Plant height, 33 
+  15,  #Leaf phosphorus (P) content per leaf dry mass, 28
+  51  #Leaf photosynthesis rate per leaf area 15
+  #not enough data for:   #growth rate,   #leaf water content,   #leaf phenolics,
+)
 
-#summary of how much data are avilable for each trait 
-x <- filter(traits, AccSpeciesName %in% as.character(cdata$Species) & !is.na(StdValue) & !is.na(TraitID)) %>%
+traits_selected <- filter(traits, TraitID %in% selectedtraits & ErrorRisk < 4)
+traits_selected$genus <- gsub( " .*$", "", traits_selected$SpeciesName)
+traits_selected$genus <- tolower(traits_selected$genus)
+
+#join the trait data to the C data, based on species names
+traits_by_sp <- filter(traits_selected, AccSpeciesName %in% as.character(cdata$Species) & !is.na(StdValue) & !is.na(TraitID)) %>%
   group_by(sp = AccSpeciesName, trait = TraitName) %>%
   summarise(value = median(StdValue)) %>%
-  ungroup() %>%
-  group_by(trait) %>%
-  summarise(dats = length(sp)) %>%
-  arrange(-dats)
+  spread(trait, value) %>% #get trait into wide format before joining
+  mutate(Species = as.character(sp))
+cdata_traits <- left_join(cdata, traits_by_sp, by = "Species")
+ 
+####### 
+#summary of traits at the genus level and comparing to the species level traits
+#######
 
-#graphing the various traits; note that this is for data exploration NOT for model selection or data dredging
-smalltraits2 <- filter(traits, TraitID == 28)
-smalltraits2_sp <- group_by(smalltraits2, SpeciesName) %>% summarize(loopedvar = mean(StdValue))
-smalltraits2_sp$Species <- smalltraits2_sp$SpeciesName
+#graphs of a particular trait at the genus level
+filter(traits_selected, TraitID == 14 ) %>%
+  ggplot(aes(x = genus, y = StdValue)) + geom_boxplot() + geom_jitter(alpha = 0.1) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
 
-cdata_loopedvar <- left_join(cdata, smalltraits2_sp, by = "Species")
+#graphs of correlation between species level data and genus level data
+#join the trait data to the C data, based on species names
+traits_by_sp_genus <- filter(traits_selected, AccSpeciesName %in% as.character(cdata$Species) & !is.na(StdValue) & !is.na(TraitID)) %>%
+  group_by(sp = AccSpeciesName, trait = TraitName, genus) %>%
+  summarise(species_median = median(StdValue),
+            species_mean = mean(StdValue),
+            species_sd = sd(StdValue),
+            species_n = n())
 
-print(nrow(subset(cdata_loopedvar, !is.na(loopedvar))))
+genus_level_traits <- group_by(traits_selected, trait = TraitName, genus) %>%
+  summarise(genus_median = median(StdValue, na.rm = TRUE),
+            genus_mean = mean(StdValue, na.rm = TRUE),
+            genus_sd = sd(StdValue, na.rm = TRUE),
+            genus_n = n())
 
-ggplot(cdata_loopedvar, aes(x = loopedvar, y = OR_mean, ymax = OR_mean + OR_var, ymin = OR_mean - OR_var,)) + 
-  geom_pointrange() + theme_bw() + geom_smooth(method = "lm") + xlab(unique(smalltraits2$TraitName)) +
-  facet_wrap( ~Zone)
+traits_by_sp_genus <- left_join(traits_by_sp_genus, genus_level_traits, by = c("trait", "genus"))
 
-head(traits)
-names(smalltraits2)
-
-# #parred down list of traits
-# relevanttraits <- c(18, #plant height
-#                     1, #sla 14 #leaf N
-                      
-#                     231, 26, 1263, 11, 1, 21, 47, 38, 37, 159, 55, 343, 153, 14, 95, 33, 1140, 46, 43, 1111, 59, 604, 
-#                     197, 825, 8, 2, 154, 4, 31, 7, 15, 163, 50, 520, 218, 145, 1229, 318, 13, 677, 609, 403, 413, 48, 78, 53, 125,
-#                     138, 66, 981, 1258, 823, 892, 56, 982, 603, 98, 51, 199, 155, 587, 27, 232, 334, 40, 679, 45, 131, 341, 357, 
-#                     1146, 1194, 1008, 358, 1137, 146, 239, 719, 41, 350, 89, 230, 344, 324, 325, 827, 596, 238, 1132, 819, 
-#                     1131, 193, 1135, 30, 54, 570, 233, 128, 345, 12, 1138)
+ggplot(traits_by_sp_genus, aes(x = genus_mean, y = species_mean)) +  theme_bw() + 
+  geom_errorbar(aes(ymin = species_mean - species_sd, ymax = species_mean + species_sd), color = "light gray") + 
+  geom_errorbarh(aes(xmin = genus_mean - genus_sd, xmax = genus_mean + genus_sd), color = "light gray") + 
+  geom_point() + ylab("species mean + SD") + xlab("genus mean + SD") + 
+  facet_wrap(~trait, scales = "free")
 
 
+#########
+#creating the data file for the meta-analysis
+#########
+
+#getting short hand names for selected traits
+  traits_selected$t <- NA
+  traits_selected$t[traits_selected$TraitID == 11] <- "leaf_SLA"
+  traits_selected$t[traits_selected$TraitID == 1] <- "leaf_area"
+  traits_selected$t[traits_selected$TraitID == 12] <- "leaf_lifespan"
+  traits_selected$t[traits_selected$TraitID == 146] <- "leaf_CNratio"
+  traits_selected$t[traits_selected$TraitID == 14] <- "leaf_N"
+  traits_selected$t[traits_selected$TraitID == 4] <- "stem_density"
+  traits_selected$t[traits_selected$TraitID == 138] <- "seed_n"
+  traits_selected$t[traits_selected$TraitID == 59] <- "plant_lifespan"
+  traits_selected$t[traits_selected$TraitID == 18] <- "plant_height"
+  traits_selected$t[traits_selected$TraitID == 15] <- "leaf_P"
+  traits_selected$t[traits_selected$TraitID == 51] <- "leaf_photosyn"
+
+###########adding traits at the species level to mdata
+  mdata <- cdata
+  
+  #trait mean
+  traits_by_sp_mean <- filter(traits_selected, AccSpeciesName %in% as.character(cdata$Species) & !is.na(StdValue) & !is.na(TraitID)) %>%
+    group_by(AccSpeciesName, t) %>%
+    summarise(sp_trait_mean = mean(StdValue)) %>%
+    spread(t, sp_trait_mean) %>% #get trait into wide format before joining
+    mutate(Species = as.character(AccSpeciesName))
+  
+    traits_by_sp_mean$AccSpeciesName <- NULL
+    name_rename <- names(traits_by_sp_mean)
+    name_rename <- c(paste(name_rename[1:11], "_mean","_s",sep =""),"Species")
+    setnames(traits_by_sp_mean, names(traits_by_sp_mean), name_rename)
+    
+    mdata <- left_join(mdata, traits_by_sp_mean, by = "Species")
+    
+    #trait sd
+    traits_by_sp_sd <- filter(traits_selected, AccSpeciesName %in% as.character(cdata$Species) & !is.na(StdValue) & !is.na(TraitID)) %>%
+      group_by(AccSpeciesName, trait = t) %>%
+      summarise(sp_trait_sd = sd(StdValue)) %>%
+      spread(trait, sp_trait_sd) %>% #get trait into wide format before joining
+      mutate(Species = as.character(AccSpeciesName))
+    
+    traits_by_sp_sd$AccSpeciesName <- NULL
+    name_rename <- names(traits_by_sp_sd)
+    name_rename <- c(paste(name_rename[1:11], "_sd","_s",sep =""),"Species")
+    setnames(traits_by_sp_sd, names(traits_by_sp_sd), name_rename)
+    
+    mdata <- left_join(mdata, traits_by_sp_sd, by = "Species")
 
 
+###########adding traits at the genus level to mdata
+    #trait mean
+    genus_level_traits_mean <- group_by(traits_selected, trait = t, genus) %>%
+      summarise(genus_mean = mean(StdValue, na.rm = TRUE)) %>%
+      spread(trait, genus_mean) #get trait into wide format before joining
+    
+    name_rename <- names(genus_level_traits_mean)
+    name_rename <- c("genus",paste(name_rename[2:12], "_mean","_g",sep =""))
+    setnames(genus_level_traits_mean, names(genus_level_traits_mean), name_rename)
+    
+    mdata <- left_join(mdata, genus_level_traits_mean, by = "genus")
+    
+    #trait sd
+    genus_level_traits_sd <- group_by(traits_selected, trait = t, genus) %>%
+      summarise(genus_sd = sd(StdValue, na.rm = TRUE)) %>%
+      spread(trait, genus_sd) #get trait into wide format before joining
+    
+    name_rename <- names(genus_level_traits_sd)
+    name_rename <- c("genus",paste(name_rename[2:12], "_sd","_g",sep =""))
+    setnames(genus_level_traits_sd, names(genus_level_traits_sd), name_rename)
+    
+    mdata <- left_join(mdata, genus_level_traits_sd, by = "genus")
+    
+    #trait n
+    genus_level_traits_n <- group_by(traits_selected, trait = t, genus) %>%
+      summarise(genus_n = n()) %>%
+      spread(trait, genus_n) #get trait into wide format before joining
+    
+    name_rename <- names(genus_level_traits_n)
+    name_rename <- c("genus",paste(name_rename[2:12], "_n","_g",sep =""))
+    setnames(genus_level_traits_n, names(genus_level_traits_n), name_rename)
+    
+    mdata <- left_join(mdata, genus_level_traits_n, by = "genus")
+    
+    
+    ##########saving file so it doesn't have to be re-constructed each time
+    setwd("Q:/Ibanez Lab/Dan Katz/JCH traits/meta analysis")
+    write.csv(mdata, "mdata.csv")
+    ?write.csv
+    
