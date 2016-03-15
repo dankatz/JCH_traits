@@ -64,9 +64,17 @@ head(traits)
 names(traits)
 
 
-#graphing the various traits; note that this is for data exploration NOT for model selection or data dredging
+#summary of how much data are avilable for each trait 
+x <- filter(traits, AccSpeciesName %in% as.character(cdata$Species) & !is.na(StdValue) & !is.na(TraitID)) %>%
+  group_by(sp = AccSpeciesName, trait = TraitName) %>%
+  summarise(value = median(StdValue)) %>%
+  ungroup() %>%
+  group_by(trait) %>%
+  summarise(dats = length(sp)) %>%
+  arrange(-dats)
 
-smalltraits2 <- filter(traits, TraitID == 1229)
+#graphing the various traits; note that this is for data exploration NOT for model selection or data dredging
+smalltraits2 <- filter(traits, TraitID == 28)
 smalltraits2_sp <- group_by(smalltraits2, SpeciesName) %>% summarize(loopedvar = mean(StdValue))
 smalltraits2_sp$Species <- smalltraits2_sp$SpeciesName
 
@@ -74,19 +82,22 @@ cdata_loopedvar <- left_join(cdata, smalltraits2_sp, by = "Species")
 
 print(nrow(subset(cdata_loopedvar, !is.na(loopedvar))))
 
-ggplot(cdata_loopedvar, aes(x = loopedvar, y = OR_mean, ymax = OR_mean + OR_var, ymin = OR_mean - OR_var)) + 
-  geom_pointrange() + theme_bw() + geom_smooth(method = "lm") + xlab(unique(smalltraits2$TraitName))
+ggplot(cdata_loopedvar, aes(x = loopedvar, y = OR_mean, ymax = OR_mean + OR_var, ymin = OR_mean - OR_var,)) + 
+  geom_pointrange() + theme_bw() + geom_smooth(method = "lm") + xlab(unique(smalltraits2$TraitName)) +
+  facet_wrap( ~Zone)
 
+head(traits)
+names(smalltraits2)
 
-
-#parred down list of traits
-relevanttraits <- c(18, #plant height
-                    1, #sla
-                    231, 26, 1263, 11, 1, 21, 47, 38, 37, 159, 55, 343, 153, 14, 95, 33, 1140, 46, 43, 1111, 59, 604, 
-                    197, 825, 8, 2, 154, 4, 31, 7, 15, 163, 50, 520, 218, 145, 1229, 318, 13, 677, 609, 403, 413, 48, 78, 53, 125,
-                    138, 66, 981, 1258, 823, 892, 56, 982, 603, 98, 51, 199, 155, 587, 27, 232, 334, 40, 679, 45, 131, 341, 357, 
-                    1146, 1194, 1008, 358, 1137, 146, 239, 719, 41, 350, 89, 230, 344, 324, 325, 827, 596, 238, 1132, 819, 
-                    1131, 193, 1135, 30, 54, 570, 233, 128, 345, 12, 1138)
+# #parred down list of traits
+# relevanttraits <- c(18, #plant height
+#                     1, #sla 14 #leaf N
+                      
+#                     231, 26, 1263, 11, 1, 21, 47, 38, 37, 159, 55, 343, 153, 14, 95, 33, 1140, 46, 43, 1111, 59, 604, 
+#                     197, 825, 8, 2, 154, 4, 31, 7, 15, 163, 50, 520, 218, 145, 1229, 318, 13, 677, 609, 403, 413, 48, 78, 53, 125,
+#                     138, 66, 981, 1258, 823, 892, 56, 982, 603, 98, 51, 199, 155, 587, 27, 232, 334, 40, 679, 45, 131, 341, 357, 
+#                     1146, 1194, 1008, 358, 1137, 146, 239, 719, 41, 350, 89, 230, 344, 324, 325, 827, 596, 238, 1132, 819, 
+#                     1131, 193, 1135, 30, 54, 570, 233, 128, 345, 12, 1138)
 
 
 
