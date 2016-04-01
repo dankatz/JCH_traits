@@ -1,4 +1,4 @@
-#assembling the publicly available trait data, pulling missing data from the genus, 
+#assembling the privately available trait data, pulling missing data from the genus, 
 #analyzing using only the relevant traits
 
 #set up work environment
@@ -24,7 +24,7 @@ cdata$genus <- tolower(cdata$genus)
 
 
 #load in the publicly available trait data from TRY
-traits <- fread("TRYtraitpublicdownload.txt") #takes ~4 min
+traits <- fread("TRYtraitprivatedownload.txt") #takes ~2 min
 
 #selected traits, based on what JG thought was important and what traits had the largest amount
 #of publicly available data in TRY
