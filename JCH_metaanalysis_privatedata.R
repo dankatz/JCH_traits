@@ -1,4 +1,4 @@
-#preliminary meta-analysis using the publicly available data, pulling missing data from the genus
+#preliminary meta-analysis including privately available data, pulling missing data from the genus
 #analyzing using only the relevant traits
 
 #set up work environment
@@ -27,21 +27,34 @@ mdata <- read.csv("mdata.csv")
 mdata$study <-  as.numeric(as.factor(mdata$Author))
 mdata$lifestage <- NA
 mdata$lifestage[mdata$LifeStage == "Seed"] <- 1
-mdata$lifestage[mdata$LifeStage == "Seedling"] <- 0
+mdata$lifestage[mdata$LifeStage == "Seedling"] <- 2
+
+mdata$dist_den <- NA
+mdata$dist_den[mdata$Predictiontested == "distance"] <- 1
+mdata$dist_den[mdata$Predictiontested == "density"] <- 2
+
 
 #is there isn't species level data, take the genus level data
 #stem density
-mdata$stem_density_mean <- mdata$stem_density_mean_s
+mdata$leaf_photosyn_mean <- mdata$leaf_photosyn_mean_s
 for(i in 1:nrow(mdata)){  #should replace for loop with a more efficient way to do this... and make into a function
-  if(is.na(mdata$stem_density_mean[i])){mdata$stem_density_mean[i] <- mdata$stem_density_mean_g[i]}
+  if(is.na(mdata$leaf_photosyn_mean[i])){mdata$leaf_photosyn_mean[i] <- mdata$leaf_photosyn_mean_g[i]}
 }
 
-mdata$stem_density_sd <- mdata$stem_density_sd_s
+mdata$leaf_photosyn_sd <- mdata$leaf_photosyn_sd_s
 for(i in 1:nrow(mdata)){
-  if(is.na(mdata$stem_density_sd[i])){mdata$stem_density_sd[i] <- mdata$stem_density_sd_g[i]}
+  if(is.na(mdata$leaf_photosyn_sd[i])){mdata$leaf_photosyn_sd[i] <- mdata$leaf_photosyn_sd_g[i]}
 }
 
-mdata$stem_density_sd[mdata$stem_density_sd == 0 & !is.na(mdata$stem_density_sd)] <- 0.001 #to prevent irrational values
+mdata$leaf_photosyn_sd[mdata$leaf_photosyn_sd == 0 & !is.na(mdata$leaf_photosyn_sd)] <- 0.001 #to prevent irrational values
+
+#datasubset for model
+mdata_subset <- subset(mdata, LifeStage == "Seedling")
+mdata_subset$study <-  as.numeric(as.factor(mdata_subset$Author))
+
+######WHY DOES A RANDOMLY GENERATED VARIABLE COME OUT AS SIGNIFICANT A LARGE PORTION OF THE TIME???
+#mdata_subset <- subset(mdata_subset, OR_mean > -5) #it isn't driven by this outlier.
+
 
 #####################
 #meta-analysis
@@ -53,74 +66,89 @@ cat("
    
     ###### missing data
        for(i in 1:n_obs){
-          stem_density_mean[i] ~ dunif(stem_density_mean_min, stem_density_mean_max)
-          stem_density_sd[i] ~ dunif(stem_density_sd_min, stem_density_sd_max)
+          variable_mean[i] ~ dunif(variable_mean_min, variable_mean_max)
+          variable_sd[i] ~ dunif(variable_sd_min, variable_sd_max)
         }
 
     ###### latent vars
        for(i in 1:n_obs){
-          stem_density[i] ~ dnorm(stem_density_mean[i], (1/stem_density_sd[i]^2))
-          stem_density_p[i] <- max(stem_density[i], 0.01) #to prevent it from going below zero
+          variable[i] ~ dnorm(variable_mean[i], (1/variable_sd[i]^2))
+          variable_p[i] <- max(variable[i], 0.001) #to prevent it from going below zero
         }
 
     ###### model
     for(i in 1:n_obs){
       OR_mean[i] ~ dnorm(OR[i], 1/OR_var[i])
 
-      OR[i] <- study_re[study[i]] + lifestage_int * lifestage[i]  
-               # alpha_1 * stem_density_p[i]
-
+      OR[i] <- study_re[study[i]] +  #dist_den_int[dist_den[i]] +  
+               #alpha_1 * variable_p[i]
+                alpha_1 * null_var[i]
     }
 
     ###### priors
     for(s in 1:nstudies){study_re[s] ~ dnorm(mu, tau)}
     mu ~ dnorm(0, 0.0001)
     tau ~ dgamma(0.001, 0.001)
+#     tau  <- 1/(sigma^2)
+#     sigma ~ dunif(0,10)
 
-    lifestage_int ~ dnorm(0, 0.0001)
- #   alpha_1 ~ dnorm(0, 0.0001)
+# 
+#     dist_den_int[1] ~ dnorm(0, 0.0001)
+#     dist_den_int[2] ~ dnorm(0, 0.0001)
+    alpha_1 ~ dnorm(0, 0.0001)
 
     }
     ",fill=TRUE)
 sink() 
 
+rand <- runif(nrow(mdata_subset), 0,0.3)
+ggplot(mdata_subset, aes(x = rand, y = OR_mean, color = as.factor(study))) + geom_point() #+ geom_smooth(method = "lm")
 
 jags <- jags.model('model.txt',
                    data = list(
                      
                   #indices
-                     'n_obs' = nrow(mdata),
-                     'study' = mdata$study,
-                     'nstudies' = max(mdata$study),
+                     'n_obs' = nrow(mdata_subset),
+                     'study' = mdata_subset$study,
+                     'nstudies' = max(mdata_subset$study),
                      
                   #Odds ratio
-                    'OR_mean' = mdata$OR_mean,
-                    'OR_var' = mdata$OR_var,
+                    'OR_mean' = mdata_subset$OR_mean,
+                    'OR_var' = mdata_subset$OR_var,
                   
                   #covariates
-                    'lifestage' = mdata$lifestage,
-                    'stem_density_mean' = mdata$stem_density_mean,
-                    'stem_density_sd' = mdata$stem_density_sd,
-                    'stem_density_mean_min' = min(mdata$stem_density_mean, na.rm = TRUE),
-                    'stem_density_mean_max' = max(mdata$stem_density_mean, na.rm = TRUE),
-                    'stem_density_sd_min' = min(mdata$stem_density_sd, na.rm = TRUE),
-                    'stem_density_sd_max' = max(mdata$stem_density_sd, na.rm = TRUE)
+                    'null_var' = rand,
+                  
+                    #'lifestage' = mdata_subset$lifestage,
+                    #'dist_den' = mdata_subset$dist_den,
+                    'variable_mean' = mdata_subset$leaf_photosyn_mean,
+                    'variable_sd' = mdata_subset$leaf_photosyn_sd,
+                    'variable_mean_min' = min(mdata_subset$leaf_photosyn_mean, na.rm = TRUE),
+                    'variable_mean_max' = max(mdata_subset$leaf_photosyn_mean, na.rm = TRUE),
+                    'variable_sd_min' = min(mdata_subset$leaf_photosyn_sd, na.rm = TRUE),
+                    'variable_sd_max' = max(mdata_subset$leaf_photosyn_sd, na.rm = TRUE)
                    ),
                    n.chains = 3,
                    n.adapt = 100)
 
 #parameter of interest results
 update(jags,n.iter=100) #update(jags,n.iter=20000) 
-mcmc_samples <- coda.samples(jags, variable.names=c("lifestage_int"),  n.iter=50000)
+mcmc_samples <- coda.samples(jags, variable.names=c("alpha_1"),  n.iter=10000)
 plot(mcmc_samples)  
 
-mcmc_samples <- coda.samples(jags, variable.names=c("alpha_1", "mu","study_re"),  n.iter=10000)
 
+mcmc_samples <- coda.samples(jags, variable.names=c("dist_den_int","alpha_1", "mu","study_re"),  n.iter=10000)
+plot(mcmc_samples)  
+
+
+
+
+mcmc_samples <- coda.samples(jags, variable.names=c("variable_p"),  n.iter=10000)
 plot(mcmc_samples)  
 
 #residuals and model fit
 #dic.jags <- (dic.samples(jags, 50000, "pD")); dic.jags #linear model: pD = 179.8, quadratic pD = 174.7, exponential = 172.7
-mcmc_samples2 <- coda.samples(jags, variable.names=c("OR"),  n.iter=50000)
+mcmc_samples2 <- coda.samples(jags, variable.names=c("OR"),  n.iter=10000)
 
 resultsall<-summary(mcmc_samples2)    
 results<-data.frame(resultsall$statistics,resultsall$quantiles) 
@@ -130,9 +158,9 @@ results$param7<-substr(results$parameter,1,7)
 results$param12<-substr(results$parameter,1,12)
 
 #predicted versus observed
-mdata$predicted <-  results$Mean[results$param2=="OR"]
-summary(lm((mdata$predicted ) ~ mdata$OR_mean))
-ggplot(mdata, aes(x = predicted, y = OR_mean)) + geom_point() + geom_smooth(method = "lm") + theme_bw() + 
+mdata_subset$predicted <-  results$Mean[results$param2=="OR"]
+summary(lm((mdata_subset$predicted ) ~ mdata_subset$OR_mean))
+ggplot(mdata_subset, aes(x = predicted, y = OR_mean)) + geom_point() + geom_smooth(method = "lm") + theme_bw() + 
   xlab("OR (predicted)") + ylab("OR (measured)")
 ggsave("predicted_vs_observed.jpeg")
 
