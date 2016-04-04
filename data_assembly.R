@@ -41,7 +41,7 @@ selectedtraits <- c( #trait description, number of observations on the species l
   #other potentially useful traits,
   18,  #Plant height, 33 
   15,  #Leaf phosphorus (P) content per leaf dry mass, 28
-  51  #Leaf photosynthesis rate per leaf area 15
+  51  #Leaf phosphorus (P) per leaf area 15
   #not enough data for:   #growth rate,   #leaf water content,   #leaf phenolics,
 )
 
@@ -62,7 +62,7 @@ cdata_traits <- left_join(cdata, traits_by_sp, by = "Species")
 #######
 
 #graphs of a particular trait at the genus level
-filter(traits_selected, TraitID == 14 ) %>%
+filter(traits_selected, TraitID == 51 ) %>%
   ggplot(aes(x = genus, y = StdValue)) + geom_boxplot() + geom_jitter(alpha = 0.1) + theme_bw() +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
 
@@ -106,7 +106,7 @@ ggplot(traits_by_sp_genus, aes(x = genus_mean, y = species_mean)) +  theme_bw() 
   traits_selected$t[traits_selected$TraitID == 59] <- "plant_lifespan"
   traits_selected$t[traits_selected$TraitID == 18] <- "plant_height"
   traits_selected$t[traits_selected$TraitID == 15] <- "leaf_P"
-  traits_selected$t[traits_selected$TraitID == 51] <- "leaf_photosyn"
+  traits_selected$t[traits_selected$TraitID == 51] <- "leaf_P_area"
 
 ###########adding traits at the species level to mdata
   mdata <- cdata
@@ -178,5 +178,3 @@ ggplot(traits_by_sp_genus, aes(x = genus_mean, y = species_mean)) +  theme_bw() 
     ##########saving file so it doesn't have to be re-constructed each time
     setwd("Q:/Ibanez Lab/Dan Katz/JCH traits/meta analysis")
     write.csv(mdata, "mdata.csv")
-    ?write.csv
-    

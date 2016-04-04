@@ -73,7 +73,7 @@ selectedtraits <- c( #trait description, number of observations on the species l
   #other potentially useful traits,
 18,  #Plant height, 33 
 15,  #Leaf phosphorus (P) content per leaf dry mass, 28
-51  #Leaf photosynthesis rate per leaf area 15
+51  #Leaf phosphorus (P) per leaf area 15
    #not enough data for:   #growth rate,   #leaf water content,   #leaf phenolics,
   )
 
