@@ -106,7 +106,7 @@ ggplot(traits_by_sp_genus, aes(x = genus_mean, y = species_mean)) +  theme_bw() 
   traits_selected$t[traits_selected$TraitID == 59] <- "plant_lifespan"
   traits_selected$t[traits_selected$TraitID == 18] <- "plant_height"
   traits_selected$t[traits_selected$TraitID == 15] <- "leaf_P"
-  traits_selected$t[traits_selected$TraitID == 51] <- "leaf_P_area"
+  traits_selected$t[traits_selected$TraitID == 51] <- "leafP_area"  #missing _ prevents overlapping name w/ leaf_P
 
 ###########adding traits at the species level to mdata
   mdata <- cdata
@@ -174,6 +174,30 @@ ggplot(traits_by_sp_genus, aes(x = genus_mean, y = species_mean)) +  theme_bw() 
     
     mdata <- left_join(mdata, genus_level_traits_n, by = "genus")
     
+    
+    #converting latitude to decimal degrees
+    library(stringr)
+    library(sp)
+    deg <- substr(as.character(mdata$Latitude), 1,2)
+    min <- substr(as.character(mdata$Latitude), 4,5)
+    sec <- substr(as.character(mdata$Latitude), 7,11)
+    direction <- substr(as.character(mdata$Latitude), 13,13)
+    lat_dms <- char2dms(from = paste(deg, "d", min, "m", sec, "s", direction, sep = ""), chd = "d", chm = "m", chs = "s")
+    lat_dd <- as.numeric(lat_dms)
+    mdata$lat_dd <- lat_dd
+    
+    #converting longitude to decimal degrees
+    longstr <- as.character(mdata$Longitude)
+    longstr[4] <- "88:59:09.59:W" #manuallly fixing a format mistake
+    longstr[79] <- "107:23:06.42:W" #manuallly fixing a format mistake
+    longstr <- str_pad(longstr, width = max(nchar(longstr)), side = "left", pad = " ") #the strings are different lengths
+    deg <- as.numeric(substr(longstr, 1,3))
+    min <- substr(longstr, 5,6)
+    sec <- substr(longstr, 8,12)
+    direction <- substr(longstr, 14,14)
+    long_dms <- char2dms(from = paste(deg, "d", min, "m", sec, "s", direction, sep = ""), chd = "d", chm = "m", chs = "s")
+    long_dd <- as.numeric(long_dms)
+    mdata$long_dd <- long_dd
     
     ##########saving file so it doesn't have to be re-constructed each time
     setwd("Q:/Ibanez Lab/Dan Katz/JCH traits/meta analysis")
