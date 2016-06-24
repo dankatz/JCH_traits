@@ -14,11 +14,10 @@ rm(list = ls())
 #################
 #load in data
 #################
-
-#load in the publicly available trait data from TRY that were downloaded on 4/21/16 (see "TRY_alldatarequests.R")
+#load in the privately available trait data from TRY that were downloaded on 5/09/16 (see "TRY_alldatarequests.R")
 setwd("Q:/Ibanez Lab/Dan Katz/JCH traits/data")
-traits <- fread("TRYtrait_Comita2010_Johnson2012.txt") #takes ~2 min
-  
+traits <- fread("TRYtrait_Comita2010_Johnson2012_private.txt") #takes ~2 min
+
     traits_selected <- filter(traits, ErrorRisk < 4) #some TRY data are flagged as unreliable; removing those records here
     traits_selected$genus <- gsub( " .*$", "", traits_selected$SpeciesName)
     traits_selected$genus <- tolower(traits_selected$genus)
@@ -41,6 +40,7 @@ traits <- fread("TRYtrait_Comita2010_Johnson2012.txt") #takes ~2 min
     traits_selected$t[traits_selected$TraitID == 46] <- "leaf_thickness" 
     traits_selected$t[traits_selected$TraitID == 7] <- "myco_type" 
     traits_selected$t[traits_selected$TraitID == 1030] <- "myco_infection_intensity" 
+    traits_selected$t[traits_selected$TraitID == 53] <- "leaf_photosyn" 
     
   #load in data from Comita et al. 2010
     setwd("Q:/Ibanez Lab/Dan Katz/JCH traits/data/Comita et al. 2010")
@@ -77,27 +77,27 @@ ddc_traits_genus <- left_join(ddc, traits_by_genus, by = "genus")
 #data exploration 
 #################
 
-names(ddc_traits_genus)
-str(ddc_traits_genus)
+names(ddc_traits_sp)
+str(ddc_traits_sp)
 
-ggplot(ddc_traits_genus, aes(x = stem_density, y = conspecificadult, 
+ggplot(ddc_traits_sp, aes(x = plant_height, y = conspecificadult, 
                              ymin = conspecificadult - conspecificadult_sd, 
                              ymax = conspecificadult + conspecificadult_sd)) + 
-  geom_point() + geom_errorbar(alpha = 0.5) + theme_bw() + geom_smooth()
+  geom_point() + geom_errorbar(alpha = 0.5) + theme_bw() + geom_smooth(method = "lm")
 
 # [9] "leaf_area"                "leaf_CNratio"             "leaf_lifespan"            "leaf_N"                  
 # [13] "leaf_P"                   "leaf_SLA"                 "leaf_thickness"           "leafN_area"              
 # [17] "leafP_area"               "myco_infection_intensity" "plant_height"             "plant_lifespan"          
 # [21] "seed_n"                   "stem_density"             N     
 
-ggplot(ddc_traits_sp, aes(x = leaf_N, 
+ggplot(ddc_traits_sp, aes(x = plant_lifespan, 
                           y = conspecificadult, 
                              ymin = conspecificadult - conspecificadult_sd, 
                              ymax = conspecificadult + conspecificadult_sd)) + 
-  geom_point() + geom_errorbar(alpha = 0.5) + theme_bw() + geom_smooth()
+  geom_point() + geom_errorbar(alpha = 0.5) + theme_bw() + geom_smooth(method = "lm")
 
 
-ggplot(ddc_traits_sp, aes(x = log(leaf_P * leaf_SLA), y = conspecificadult, 
+ggplot(ddc_traits_sp, aes(x = log(leaf_P), y = conspecificadult, 
                              ymin = conspecificadult - conspecificadult_sd, 
                              ymax = conspecificadult + conspecificadult_sd)) + 
   geom_point() + geom_errorbar(alpha = 0.5) + theme_bw() + geom_smooth()
